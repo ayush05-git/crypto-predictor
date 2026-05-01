@@ -1,0 +1,170 @@
+What is a Backend?
+Think of it like a restaurant kitchen:
+
+You (the customer) sit in the front and order food
+The kitchen (backend) does all the hard work
+You never see what happens in the kitchen
+You just get the food (data) back
+
+In your project:
+
+Frontend = the dining area (what you see in browser)
+Backend = the kitchen (Python, AI, data processing)
+
+
+Your Backend has 2 files
+backend/
+├── model.py   → the AI brain
+└── server.py  → the door to the outside world
+
+File 1 — model.py
+This file has 3 functions that run one after another:
+
+Function 1 — get_data()
+pythondef get_data():
+    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    params = {"vs_currency": "usd", "days": "60"}
+    data = requests.get(url, params=params).json()
+    prices = [p[1] for p in data["prices"]]
+    return np.array(prices)
+What it does:
+
+Goes to CoinGecko on the internet
+Downloads 60 days of Bitcoin prices
+CoinGecko sends back data that looks like this:
+
+json[[1709000000, 62000], [1709086400, 63500], [1709172800, 61800]...]
+
+First number = timestamp (date in unix format)
+Second number = price in USD
+We only care about the price so we grab p[1] from each pair
+Returns a clean list of just prices like [62000, 63500, 61800...]
+
+
+Function 2 — train()
+pythondef train():
+    prices = get_data()                                    # step 1
+    scaler = MinMaxScaler()                                # step 2
+    prices = scaler.fit_transform(prices.reshape(-1, 1))  # step 3
+    ...
+    model.fit(X, y, epochs=5, batch_size=8)               # step 4
+    return model, scaler, prices
+```
+
+**Step 1 — Get the data**
+Calls `get_data()` to fetch prices
+
+**Step 2 & 3 — Normalize**
+Converts big numbers like `$82,000` into small numbers between 0 and 1:
+```
+$62,000 → 0.45
+$75,000 → 0.68
+$82,000 → 0.87
+Why? Because AI models learn much better with small numbers. Think of it like converting miles to a 0-10 scale for easier comparison.
+Step 3 — Sliding Window
+pythonwindow = 5
+for i in range(len(prices) - window):
+    X.append(prices[i:i+window])  # input: 5 days
+    y.append(prices[i+window])    # output: next day
+```
+Creates learning pairs like:
+```
+Input (X)                     Output (y)
+[day1, day2, day3, day4, day5] → day6
+[day2, day3, day4, day5, day6] → day7
+[day3, day4, day5, day6, day7] → day8
+This teaches the AI — "when you see these 5 days, the next day looks like this"
+Step 4 — Build and Train LSTM
+pythonmodel = Sequential()
+model.add(LSTM(50, input_shape=(window, 1)))
+model.add(Dense(1))
+model.compile(optimizer="adam", loss="mse")
+model.fit(X, y, epochs=5, batch_size=8)
+
+Sequential = layers stacked on top of each other
+LSTM(50) = the memory layer with 50 neurons — finds patterns in the sequence
+Dense(1) = output layer — gives one number (tomorrow's price)
+optimizer="adam" = the method used to improve the model during training
+loss="mse" = how we measure how wrong the model is (Mean Squared Error)
+epochs=5 = looks at all the data 5 times
+batch_size=8 = learns from 8 examples at a time
+
+
+Function 3 — predict()
+pythondef predict():
+    model, scaler, prices = train()
+    last = prices[-5:]
+    preds = []
+    for _ in range(7):
+        p = model.predict(last.reshape(1, 5, 1))
+        preds.append(float(scaler.inverse_transform(p)[0][0]))
+        last = np.append(last[1:], p).reshape(5, 1)
+    return preds
+```
+
+After training, predicts 7 days like a chain:
+```
+Real data:     [day56, day57, day58, day59, day60]  →  predict day61
+Update window: [day57, day58, day59, day60, day61]  →  predict day62
+Update window: [day58, day59, day60, day61, day62]  →  predict day63
+...7 times
+Each prediction gets fed back in as input for the next one. At the end scaler.inverse_transform converts the 0-1 numbers back to real dollar values like $82,000.
+
+File 2 — server.py
+pythonfrom fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from model import predict
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/predict")
+def get_prediction():
+    return {"prediction": predict()}
+```
+
+This file has one job — **expose the AI to the outside world**.
+
+**`app = FastAPI()`**
+Creates the server application
+
+**`CORSMiddleware`**
+Allows the browser to talk to this server. Without this the browser blocks all requests for security reasons.
+
+**`@app.get("/predict")`**
+Creates a URL endpoint. When anyone visits `http://127.0.0.1:8000/predict` it runs `get_prediction()` and sends back the predictions as JSON.
+
+Think of it like a vending machine:
+```
+You press button (/predict)
+      ↓
+Machine runs internally (predict())
+      ↓
+Gives you the result (JSON response)
+```
+
+---
+
+## How the two files connect
+```
+server.py receives request
+      ↓
+calls predict() from model.py
+      ↓
+model.py calls get_data() → fetches from CoinGecko
+      ↓
+model.py trains the LSTM
+      ↓
+model.py predicts 7 days
+      ↓
+returns list of prices to server.py
+      ↓
+server.py sends it back as JSON to the browser
+
+That's the entire backend! Two files, three functions, one job — take a request, run the AI, send back predictions.

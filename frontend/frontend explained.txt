@@ -1,0 +1,212 @@
+The 3 Parts of the File
+index.html
+│
+├── HEAD    → settings, fonts, Chart.js library
+├── STYLE   → all the CSS (design, animations, layout)
+└── BODY    → HTML structure + JavaScript logic
+
+Part 1 — HEAD
+html<meta charset="UTF-8" />
+Tells the browser to use UTF-8 encoding — fixes the broken arrow symbols we had earlier.
+html<link href="https://fonts.googleapis.com/css2?family=Space+Mono&family=Syne:wght@800&display=swap" rel="stylesheet" />
+Loads two fonts from Google:
+
+Space Mono — the monospace font used for prices and labels
+Syne — the bold font used for the big BTC/USD heading
+
+html<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+Loads Chart.js — a free library that draws the animated line graph. Without this one line, no chart.
+
+Part 2 — CSS (the design)
+CSS Variables
+css:root {
+  --green: #00ff9d;
+  --red: #ff4d6d;
+  --bg: #060810;
+  --card: rgba(255,255,255,0.03);
+  --border: rgba(0,255,157,0.12);
+}
+Defines reusable color values. Instead of typing #00ff9d everywhere, we just write var(--green). Change it once here and it updates everywhere.
+
+Background Effects
+css.bg-grid {
+  background-image:
+    linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+Creates the faint green grid pattern in the background using two overlapping gradients — one horizontal, one vertical.
+css.glow-orb {
+  background: radial-gradient(circle, rgba(0,255,157,0.07) 0%, transparent 70%);
+  animation: orbPulse 4s ease-in-out infinite;
+}
+The big soft green glow at the top. It slowly pulses using a CSS animation — gets slightly bigger and brighter every 4 seconds.
+css.scanline {
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
+  );
+}
+Adds very faint horizontal lines across the whole page — gives it that old CRT monitor / terminal feel.
+
+Animations
+There are 5 animations in the CSS:
+css@keyframes fadeDown { }   /* header slides down on page load */
+@keyframes fadeUp { }     /* cards slide up on page load */
+@keyframes orbPulse { }   /* green glow breathes */
+@keyframes dotPulse { }   /* loading dots bounce */
+@keyframes tickerScroll { } /* ticker tape scrolls left */
+Each one is defined once and then applied to elements using animation: name duration.
+
+Cards
+css.card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(0,255,157,0.12);
+  border-radius: 3px;
+}
+
+.card::before {
+  background: linear-gradient(90deg, transparent, rgba(0,255,157,0.6), transparent);
+  height: 1px;
+}
+Each card has a very dark semi-transparent background and a thin green border. The ::before adds the bright green line at the very top of each card — that glowing top edge effect.
+
+Button Shimmer
+css.predict-btn::after {
+  background: linear-gradient(90deg, transparent, rgba(0,255,157,0.08), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+
+.predict-btn:hover::after { transform: translateX(100%); }
+On hover, a faint light sweeps across the button from left to right. This is done by moving a pseudo-element (::after) from -100% to +100% when you hover.
+
+Price Rows Animation
+css.price-row {
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.price-row.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+Each row starts invisible and shifted left. When JavaScript adds the visible class, CSS smoothly animates it into place. Each row has a slight delay so they appear one by one.
+
+Ticker Tape
+css.ticker-track {
+  animation: tickerScroll 18s linear infinite;
+}
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+The scrolling price strip. The track contains the prices duplicated twice — so when it scrolls to the halfway point, it loops seamlessly back to the start without any jump.
+
+Part 3 — HTML Structure
+html<div class="bg-grid"></div>    <!-- grid background -->
+<div class="scanline"></div>   <!-- scanline overlay -->
+<div class="glow-orb"></div>   <!-- green glow -->
+
+<div class="container">
+  <header>         <!-- BTC/USD title -->
+  <div ticker>     <!-- scrolling price strip -->
+  <div card>       <!-- Run Prediction button -->
+  <div error>      <!-- error message -->
+  <div stats-row>  <!-- High / Low / Change boxes -->
+  <div chart-card> <!-- Chart.js line graph -->
+  <div results>    <!-- 7 price rows -->
+  <footer>         <!-- disclaimer -->
+</div>
+Most elements start with display: none — they are hidden until JavaScript shows them after the prediction loads.
+
+Part 4 — JavaScript Logic
+1. formatUSD()
+javascriptconst formatUSD = (n) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+Converts a raw number like 82000 into $82,000. Uses the browser's built-in number formatter.
+
+2. getDayLabel()
+javascriptconst getDayLabel = (offset) => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset + 1);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+};
+Calculates the actual date for each predicted day. If today is Saturday March 7, D+1 becomes Sun, Mar 8, D+2 becomes Mon, Mar 9 etc.
+
+3. drawChart()
+javascriptchartInstance = new Chart(ctx, {
+  type: "line",
+  data: { labels, datasets: [...] },
+  options: { animation: { duration: 1200 }, ... }
+});
+Creates the Chart.js line graph. Key things:
+
+tension: 0.4 — makes the line curved instead of straight
+fill: true — adds the gradient area below the line
+backgroundColor with gradient — green at top fading to transparent at bottom
+animation duration: 1200 — the line draws itself over 1.2 seconds
+
+
+4. buildTicker()
+javascriptconst all = [...items, ...items]; // duplicate the array
+track.innerHTML = all.map(t => `<span class="ticker-item">${t}</span>`).join("");
+Builds the scrolling ticker tape. Duplicates the prices so the CSS scroll animation loops seamlessly.
+
+5. showStats()
+javascriptconst high = Math.max(...predictions);
+const low = Math.min(...predictions);
+const change = ((predictions[6] - predictions[0]) / predictions[0] * 100).toFixed(2);
+Calculates the 3 stat boxes — highest predicted price, lowest predicted price, and percentage change from day 1 to day 7.
+
+6. loadPrediction() — the main function
+This runs when you click the button. Step by step:
+javascript// Step 1 — disable button, show loading dots
+btn.disabled = true;
+btn.innerHTML = `<span class="loader">...`;
+
+// Step 2 — call your FastAPI server
+const res = await fetch("http://127.0.0.1:8000/predict");
+const data = await res.json();
+const predictions = data.prediction; // [82000, 81500, 81200...]
+
+// Step 3 — show stats boxes
+showStats(predictions);
+
+// Step 4 — show and draw the chart
+chartCard.style.display = "block";
+drawChart(predictions);
+
+// Step 5 — build the ticker tape
+buildTicker(predictions);
+
+// Step 6 — build price rows with staggered animation
+predictions.forEach((p, i) => {
+  // create row
+  setTimeout(() => row.classList.add("visible"), 400 + i * 130);
+  // each row appears 130ms after the previous one
+});
+
+// Step 7 — re-enable button
+btn.disabled = false;
+```
+
+---
+
+## How it all connects
+```
+Click button
+    ↓
+JavaScript fetch() calls FastAPI
+    ↓
+Gets back 7 prices as JSON
+    ↓
+showStats()     → fills the 3 stat boxes
+drawChart()     → draws the animated line graph
+buildTicker()   → starts the scrolling strip
+forEach loop    → reveals price rows one by one
+    ↓
+Everything animates into view using CSS transitions
+That's the entire frontend — HTML gives the structure, CSS makes it look good and animate, JavaScript fetches the data and puts it all together!

@@ -1,0 +1,3 @@
+every time the computer shuts down then the app also shuts down and we have to manually start the apps backend and frontend server
+command - cd to the directory, py -m uvicron server:app --reload (backend : starts the api server);
+        - cd to the directory , py -m http.server 5500 (frontend : reloads the web front from the exact location of the pc);

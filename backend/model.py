@@ -1,7 +1,8 @@
 import numpy as np
 import requests
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.ensemble import GradientBoostingRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
 
 def get_data():
     url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
@@ -13,31 +14,27 @@ def get_data():
 def train():
     prices = get_data()
     scaler = MinMaxScaler()
-    prices_scaled = scaler.fit_transform(prices.reshape(-1, 1)).flatten()
-
+    prices = scaler.fit_transform(prices.reshape(-1, 1))
     X, y = [], []
     window = 5
-    for i in range(len(prices_scaled) - window):
-        X.append(prices_scaled[i:i + window])
-        y.append(prices_scaled[i + window])
-
+    for i in range(len(prices) - window):
+        X.append(prices[i:i+window])
+        y.append(prices[i+window])
     X = np.array(X)
     y = np.array(y)
-
-    model = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, max_depth=3)
-    model.fit(X, y)
-
-    return model, scaler, prices_scaled
+    model = Sequential()
+    model.add(LSTM(50, input_shape=(window, 1)))
+    model.add(Dense(1))
+    model.compile(optimizer="adam", loss="mse")
+    model.fit(X, y, epochs=5, batch_size=8)
+    return model, scaler, prices
 
 def predict():
-    model, scaler, prices_scaled = train()
-    last = list(prices_scaled[-5:])
+    model, scaler, prices = train()
+    last = prices[-5:]
     preds = []
-
     for _ in range(7):
-        x = np.array(last[-5:]).reshape(1, -1)
-        p = model.predict(x)[0]
-        preds.append(float(scaler.inverse_transform([[p]])[0][0]))
-        last.append(p)
-
+        p = model.predict(last.reshape(1, 5, 1))
+        preds.append(float(scaler.inverse_transform(p)[0][0]))
+        last = np.append(last[1:], p).reshape(5, 1)
     return preds

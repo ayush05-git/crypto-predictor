@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BTC Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --green: #00ff9d;
+      --red: #ff4d6d;
+      --bg: #060810;
+      --card: rgba(255,255,255,0.03);
+      --border: rgba(0,255,157,0.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      font-family: 'Space Mono', monospace;
+      color: #e8eaf6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    .scanline {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px
+      );
+    }
+
+    .glow-orb {
+      position: fixed; width: 700px; height: 700px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,255,157,0.07) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+      top: -250px; left: 50%; transform: translateX(-50%);
+      animation: orbPulse 4s ease-in-out infinite;
+    }
+
+    @keyframes orbPulse {
+      0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
+    }
+
+    .container {
+      position: relative; z-index: 2;
+      max-width: 780px; margin: 0 auto;
+      padding: 60px 24px 100px;
+      display: flex; flex-direction: column; align-items: center; gap: 32px;
+    }
+
+    .header { text-align: center; animation: fadeDown 0.8s ease both; }
+
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .eyebrow {
+      font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+      color: var(--green); opacity: 0.7; margin-bottom: 12px;
+    }
+
+    .title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(48px, 10vw, 80px);
+      font-weight: 800; line-height: 1; color: #fff;
+      text-shadow: 0 0 60px rgba(0,255,157,0.25);
+      letter-spacing: -0.03em;
+    }
+
+    .title span { color: var(--green); }
+
+    .subtitle {
+      margin-top: 14px;
+      font-size: 12px; opacity: 0.35; letter-spacing: 0.05em; line-height: 1.8;
+    }
+
+    .card {
+      width: 100%;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 28px;
+      position: relative; overflow: hidden;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,255,157,0.6), transparent);
+    }
+
+    .predict-btn {
+      width: 100%; padding: 18px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: 'Space Mono', monospace;
+      font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase;
+      cursor: pointer; border-radius: 3px;
+      transition: background 0.2s, box-shadow 0.3s, transform 0.1s;
+      position: relative; overflow: hidden;
+    }
+
+    .predict-btn::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(0,255,157,0.08), transparent);
+      transform: translateX(-100%);
+      transition: transform 0.5s ease;
+    }
+
+    .predict-btn:hover::after { transform: translateX(100%); }
+
+    .predict-btn:hover {
+      background: rgba(0,255,157,0.06);
+      box-shadow: 0 0 40px rgba(0,255,157,0.2), inset 0 0 20px rgba(0,255,157,0.04);
+    }
+
+    .predict-btn:active { transform: scale(0.99); }
+    .predict-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .loader { display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+      animation: dotPulse 1.2s ease-in-out infinite;
+      display: inline-block;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0.2; transform: scale(0.7); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+
+    .error-box {
+      width: 100%;
+      background: rgba(255,77,109,0.07);
+      border: 1px solid rgba(255,77,109,0.3);
+      border-radius: 3px; padding: 16px;
+      font-size: 12px; color: var(--red); line-height: 1.6;
+      display: none;
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .stats-row {
+      width: 100%; display: none;
+      grid-template-columns: repeat(3, 1fr); gap: 12px;
+    }
+
+    .stat-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 3px; padding: 18px;
+      text-align: center; position: relative; overflow: hidden;
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .stat-box::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,255,157,0.4), transparent);
+    }
+
+    .stat-label {
+      font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+      opacity: 0.4; margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px; font-weight: 800;
+      opacity: 0; transform: translateY(8px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    .stat-value.visible { opacity: 1; transform: translateY(0); }
+    .stat-value.up { color: var(--green); }
+    .stat-value.down { color: var(--red); }
+
+    .chart-card { display: none; }
+
+    .chart-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .chart-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em;
+      color: var(--green); opacity: 0.6;
+    }
+
+    .trend-badge {
+      font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 3px;
+    }
+
+    .bullish { background: rgba(0,255,157,0.1); border: 1px solid rgba(0,255,157,0.3); color: var(--green); }
+    .bearish { background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3); color: var(--red); }
+
+    .chart-wrap { position: relative; width: 100%; height: 260px; }
+
+    .results-card { display: none; }
+
+    .results-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .results-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em;
+      color: var(--green); opacity: 0.6;
+    }
+
+    .price-rows { display: flex; flex-direction: column; gap: 3px; }
+
+    .price-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 13px 16px; border-radius: 3px;
+      background: rgba(255,255,255,0.02);
+      border-left: 2px solid transparent;
+      font-size: 13px;
+      opacity: 0; transform: translateX(-12px);
+      transition: opacity 0.35s ease, transform 0.35s ease, background 0.2s, border-color 0.2s;
+    }
+
+    .price-row.visible { opacity: 1; transform: translateX(0); }
+    .price-row:hover { background: rgba(0,255,157,0.04); border-left-color: rgba(0,255,157,0.5); }
+
+    .row-left { display: flex; align-items: center; gap: 10px; }
+
+    .day-num {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 1px solid rgba(0,255,157,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; opacity: 0.5;
+    }
+
+    .day-label { opacity: 0.5; font-size: 11px; }
+    .day-index { font-size: 10px; opacity: 0.25; margin-left: 4px; }
+    .up { color: var(--green); font-variant-numeric: tabular-nums; }
+    .down { color: var(--red); font-variant-numeric: tabular-nums; }
+
+    .ticker-wrap {
+      width: 100%; overflow: hidden;
+      border-top: 1px solid rgba(0,255,157,0.08);
+      border-bottom: 1px solid rgba(0,255,157,0.08);
+      padding: 10px 0;
+      display: none;
+    }
+
+    .ticker-track {
+      display: flex; gap: 48px; width: max-content;
+      animation: tickerScroll 18s linear infinite;
+    }
+
+    .ticker-item {
+      font-size: 11px; letter-spacing: 0.1em; white-space: nowrap;
+      color: var(--green); opacity: 0.5;
+    }
+
+    @keyframes tickerScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    .footer-note {
+      font-size: 10px; opacity: 0.2; text-align: center;
+      line-height: 1.8; max-width: 400px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="scanline"></div>
+  <div class="glow-orb"></div>
+
+  <div class="container">
+
+    <header class="header">
+      <p class="eyebrow">LSTM Neural Network</p>
+      <h1 class="title">BTC<span>/USD</span></h1>
+      <p class="subtitle">
+        7-day price forecast · trained on 60 days of live CoinGecko data<br/>
+        Model trains fresh on every prediction run
+      </p>
+    </header>
+
+    <div class="ticker-wrap" id="ticker">
+      <div class="ticker-track" id="tickerTrack"></div>
+    </div>
+
+    <div class="card">
+      <button class="predict-btn" id="btn" onclick="loadPrediction()">→ Run Prediction</button>
+    </div>
+
+    <div class="error-box" id="error"></div>
+
+    <div class="stats-row" id="statsRow">
+      <div class="stat-box">
+        <div class="stat-label">7-Day High</div>
+        <div class="stat-value up" id="statHigh">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">7-Day Low</div>
+        <div class="stat-value down" id="statLow">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Expected Change</div>
+        <div class="stat-value" id="statChange">—</div>
+      </div>
+    </div>
+
+    <div class="card chart-card" id="chartCard">
+      <div class="chart-header">
+        <span class="chart-title">Price Forecast Chart</span>
+        <span class="trend-badge" id="trendBadge"></span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="priceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card results-card" id="resultsCard">
+      <div class="results-header">
+        <span class="results-label">Daily Breakdown</span>
+      </div>
+      <div class="price-rows" id="rows"></div>
+    </div>
+
+    <p class="footer-note">
+      Predictions generated by LSTM model · Requires FastAPI on localhost:8000<br/>
+      Not financial advice · For educational purposes only
+    </p>
+
+  </div>
+
+  <script>
+    const formatUSD = (n) =>
+      new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+
+    const getDayLabel = (offset) => {
+      const d = new Date();
+      d.setDate(d.getDate() + offset + 1);
+      return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    };
+
+    let chartInstance = null;
+
+    function drawChart(predictions) {
+      const labels = predictions.map((_, i) => getDayLabel(i));
+      const ctx = document.getElementById("priceChart").getContext("2d");
+      const isUp = predictions[predictions.length - 1] >= predictions[0];
+      const lineColor = isUp ? "#00ff9d" : "#ff4d6d";
+      const gradColor = isUp ? "rgba(0,255,157," : "rgba(255,77,109,";
+
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: "BTC/USD",
+            data: predictions,
+            borderColor: lineColor,
+            borderWidth: 2.5,
+            pointBackgroundColor: lineColor,
+            pointBorderColor: lineColor,
+            pointRadius: 5,
+            pointHoverRadius: 8,
+            pointHoverBackgroundColor: "#fff",
+            tension: 0.4,
+            fill: true,
+            backgroundColor: (ctx) => {
+              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 260);
+              gradient.addColorStop(0, gradColor + "0.25)");
+              gradient.addColorStop(1, gradColor + "0)");
+              return gradient;
+            }
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 1200, easing: "easeInOutQuart" },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(6,8,16,0.95)",
+              borderColor: lineColor,
+              borderWidth: 1,
+              titleColor: lineColor,
+              bodyColor: "#e8eaf6",
+              titleFont: { family: "Space Mono", size: 11 },
+              bodyFont: { family: "Space Mono", size: 12 },
+              padding: 12,
+              callbacks: {
+                label: (ctx) => "  " + formatUSD(ctx.raw)
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(255,255,255,0.04)" },
+              ticks: { color: "rgba(232,234,246,0.4)", font: { family: "Space Mono", size: 10 } },
+              border: { color: "rgba(255,255,255,0.06)" }
+            },
+            y: {
+              grid: { color: "rgba(255,255,255,0.04)" },
+              ticks: {
+                color: "rgba(232,234,246,0.4)",
+                font: { family: "Space Mono", size: 10 },
+                callback: (v) => "$" + (v / 1000).toFixed(0) + "k"
+              },
+              border: { color: "rgba(255,255,255,0.06)" }
+            }
+          }
+        }
+      });
+    }
+
+    function buildTicker(predictions) {
+      const track = document.getElementById("tickerTrack");
+      const items = predictions.map((p, i) => `D+${i+1}: ${formatUSD(p)}`);
+      const all = [...items, ...items];
+      track.innerHTML = all.map(t => `<span class="ticker-item">${t}</span>`).join("");
+      document.getElementById("ticker").style.display = "block";
+    }
+
+    function showStats(predictions) {
+      const high = Math.max(...predictions);
+      const low = Math.min(...predictions);
+      const change = ((predictions[predictions.length-1] - predictions[0]) / predictions[0] * 100).toFixed(2);
+      const isUp = change >= 0;
+
+      document.getElementById("statsRow").style.display = "grid";
+
+      setTimeout(() => {
+        const highEl = document.getElementById("statHigh");
+        const lowEl = document.getElementById("statLow");
+        const changeEl = document.getElementById("statChange");
+
+        highEl.textContent = formatUSD(high);
+        lowEl.textContent = formatUSD(low);
+        changeEl.textContent = (isUp ? "+" : "") + change + "%";
+        changeEl.className = "stat-value visible " + (isUp ? "up" : "down");
+
+        highEl.classList.add("visible");
+        lowEl.classList.add("visible");
+      }, 300);
+    }
+
+    async function loadPrediction() {
+      const btn = document.getElementById("btn");
+      const errorBox = document.getElementById("error");
+      const chartCard = document.getElementById("chartCard");
+      const resultsCard = document.getElementById("resultsCard");
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loader"><span class="dot"></span><span class="dot"></span><span class="dot"></span>&nbsp; Training model...</span>`;
+      errorBox.style.display = "none";
+      chartCard.style.display = "none";
+      resultsCard.style.display = "none";
+      document.getElementById("statsRow").style.display = "none";
+      document.getElementById("ticker").style.display = "none";
+
+      try {
+        const res = await fetch("http://0.0.0.0:8000");
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        const data = await res.json();
+        const predictions = data.prediction;
+
+        const isUp = predictions[predictions.length - 1] >= predictions[0];
+        const trend = isUp ? "bullish" : "bearish";
+
+        const badge = document.getElementById("trendBadge");
+        badge.textContent = trend;
+        badge.className = "trend-badge " + trend;
+
+        showStats(predictions);
+
+        chartCard.style.display = "block";
+        drawChart(predictions);
+
+        buildTicker(predictions);
+
+        resultsCard.style.display = "block";
+        const rows = document.getElementById("rows");
+        rows.innerHTML = "";
+
+        predictions.forEach((p, i) => {
+          const prev = i === 0 ? null : predictions[i - 1];
+          const up = prev === null || p >= prev;
+          const row = document.createElement("div");
+          row.className = "price-row";
+          row.innerHTML = `
+            <span class="row-left">
+              <span class="day-num">${i + 1}</span>
+              <span class="day-label">${getDayLabel(i)}</span>
+              <span class="day-index">D+${i + 1}</span>
+            </span>
+            <span class="${up ? "up" : "down"}">${up ? "▲" : "▼"} ${formatUSD(p)}</span>`;
+          rows.appendChild(row);
+          setTimeout(() => row.classList.add("visible"), 400 + i * 130);
+        });
+
+      } catch (e) {
+        errorBox.textContent = "⚠ " + (e.message.includes("fetch")
+          ? "Cannot reach server. Make sure FastAPI is running: py -m uvicorn server:app --reload"
+          : e.message);
+        errorBox.style.display = "block";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "→ Run Prediction";
+      }
+    }
+  </script>
+
+</body>
+</html>

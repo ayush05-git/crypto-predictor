@@ -9,6 +9,6 @@ RUN pip install --upgrade pip && \
 
 COPY . .
 
-EXPOSE 10000
+EXPOSE ${PORT:-8000}
 
-CMD ["gunicorn", "server:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:10000"]
+CMD gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000}

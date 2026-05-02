@@ -1,3 +1,7 @@
 fastapi
 uvicorn
 gunicorn
+numpy
+requests
+scikit-learn
+tensorflow

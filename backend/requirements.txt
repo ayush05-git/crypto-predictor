@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 gunicorn
-numpy
+numpy==1.23.5
 requests
 scikit-learn
-tensorflow
+tensorflow-cpu
